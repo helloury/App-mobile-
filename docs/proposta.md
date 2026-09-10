@@ -37,14 +37,14 @@ Sim. O projeto usará uma API de OCR para a leitura de textos pela câmera.
 #### 12 - Estrutura de Diretórios
 ```text
 oinkquest/
-├── assets/                 
-├── src/                    
-│   ├── components/         
-│   ├── screens/            
-│   ├── navigation/         
-│   ├── services/           
-│   ├── utils/              
-│   └── theme/              
-├── App.js                  
-├── app.json                
-├── package.json
+.
+└── oinkquest/
+    ├── assets/                 
+    ├── src/      
+    │   ├── apps/
+    │   │   └── (tabs)/         
+    │   ├── components/                    
+    │   ├── navigation/         
+    │   └──services/                
+    ├── app.json                
+    └── package.json
