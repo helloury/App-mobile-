@@ -1,11 +1,14 @@
-import { useState } from 'react';
-import { Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { router } from 'expo-router';
+import { gastosStore } from '../../store/gastosStore';
 
 export default function Registro() {
   const insets = useSafeAreaInsets();
   const [valor, setValor] = useState('0');
   const [categoria, setCategoria] = useState('Alimentação');
+  const [descricao, setDescricao] = useState(''); 
 
   function digitar(num) {
     setValor((prev) => (prev === '0' ? String(num) : prev + num));
@@ -13,20 +16,37 @@ export default function Registro() {
 
   function limpar() {
     setValor('0');
+    setDescricao('');
   }
 
   function salvar() {
-    if (valor === '0') {
+    const valorNumerico = parseFloat(valor.replace(',', '.'));
+    if (isNaN(valorNumerico) || valorNumerico <= 0) {
       Alert.alert('Aviso', 'Digite um valor maior que zero.');
       return;
     }
-    Alert.alert('Sucesso', `Registrado R$ ${valor} em ${categoria}!`);
+
+    // descrição opcional
+    const tituloFinal = descricao.trim().length > 0 
+      ? descricao.trim() 
+      : `Gasto em ${categoria}`;
+    //registro manual
+    const novoGasto = {
+      id: String(Date.now()),
+      titulo: tituloFinal,
+      categoria: categoria,
+      valor: valorNumerico,
+      data: 'Hoje',
+    };
+
+    gastosStore.adicionarGasto(novoGasto);
     limpar();
+    router.replace('/');
   }
 
   function abrirCameraOCR() {
     Alert.alert(
-      'Leitura por Câmera',
+      'Leitura por Câmera (OCR)',
       'Aponte para a anotação física ou recibo para preencher o valor automaticamente.'
     );
   }
@@ -39,7 +59,19 @@ export default function Registro() {
         <Text style={styles.valorDisplay}>{valor}</Text>
       </View>
 
-      {/* Atalhos de Categorias */}
+      {/* Campo de Descrição */}
+      <View style={styles.campoDescricaoWrapper}>
+        <TextInput
+          style={styles.inputDescricao}
+          placeholder="Adicionar descrição (opcional)..."
+          placeholderTextColor="#ADB5BD"
+          value={descricao}
+          onChangeText={setDescricao}
+          maxLength={35}
+        />
+      </View>
+
+      {/* Categorias */}
       <View style={styles.opcoesContainer}>
         {['Alimentação', 'Transporte', 'Lazer', 'Contas'].map((item) => (
           <TouchableOpacity
@@ -54,13 +86,13 @@ export default function Registro() {
         ))}
       </View>
 
-      {/* Botão da Câmera (OCR) */}
+      {/* Botão OCR */}
       <TouchableOpacity style={styles.botaoCamera} onPress={abrirCameraOCR}>
         <Text style={styles.iconeCamera}>📷</Text>
-        <Text style={styles.textoBotaoCamera}>Fotografar Anotação</Text>
+        <Text style={styles.textoBotaoCamera}>Fotografar Anotação / Recibo (OCR)</Text>
       </TouchableOpacity>
 
-      {/* Teclado Numérico Embutido */}
+      {/* Teclado Numérico */}
       <View style={styles.teclado}>
         {[
           [1, 2, 3],
@@ -102,18 +134,33 @@ const styles = StyleSheet.create({
   display: {
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 10,
-    marginBottom: 6,
+    marginTop: 6,
+    marginBottom: 4,
   },
   moeda: {
-    fontSize: 20,
+    fontSize: 18,
     color: '#6C757D',
     fontWeight: 'bold',
   },
   valorDisplay: {
-    fontSize: 44,
+    fontSize: 42,
     fontWeight: 'bold',
     color: '#212529',
+  },
+  campoDescricaoWrapper: {
+    paddingHorizontal: 6,
+    marginBottom: 6,
+  },
+  inputDescricao: {
+    height: 38,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#E9ECEF',
+    paddingHorizontal: 12,
+    fontSize: 13,
+    color: '#212529',
+    textAlign: 'center',
   },
   opcoesContainer: {
     flexDirection: 'row',
@@ -147,13 +194,13 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: '#E83E8C',
     borderRadius: 10,
-    paddingVertical: 9,
+    paddingVertical: 8,
     marginHorizontal: 4,
-    marginBottom: 10,
+    marginBottom: 8,
     gap: 8,
   },
   iconeCamera: {
-    fontSize: 16,
+    fontSize: 15,
   },
   textoBotaoCamera: {
     fontSize: 13,
@@ -166,12 +213,12 @@ const styles = StyleSheet.create({
   linhaTeclado: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 8,
+    marginBottom: 6,
   },
   tecla: {
     flex: 1,
     marginHorizontal: 4,
-    height: 50,
+    height: 48,
     borderRadius: 10,
     backgroundColor: '#FFFFFF',
     elevation: 1,
@@ -182,7 +229,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#E83E8C',
   },
   textoTecla: {
-    fontSize: 20,
+    fontSize: 19,
     fontWeight: 'bold',
     color: '#212529',
   },

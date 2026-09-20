@@ -20,7 +20,7 @@ export default function Metas() {
     { id: '3', titulo: 'Curso de Especialização', acumulado: 400, alvo: 500 },
   ]);
 
-  // Estados para o Modal de Inserção
+  // Estados para Inserção
   const [modalVisivel, setModalVisivel] = useState(false);
   const [novoTitulo, setNovoTitulo] = useState('');
   const [novoAlvo, setNovoAlvo] = useState('');
@@ -75,7 +75,7 @@ export default function Metas() {
         })}
       </ScrollView>
 
-      {/* Botão Flutuante de '+' (FAB) */}
+      {/* Botão Flutuante de '+' */}
       <TouchableOpacity
         style={styles.botaoFlutuante}
         onPress={() => setModalVisivel(true)}

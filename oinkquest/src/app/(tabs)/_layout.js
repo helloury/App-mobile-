@@ -5,7 +5,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 export default function TabsLayout() {
   const insets = useSafeAreaInsets();
 
-  // Garante um respiro mínimo no Android mesmo se o aparelho não reportar barra de gestos alta
   const bottomInset = Platform.OS === 'android' ? Math.max(insets.bottom, 10) : insets.bottom;
 
   return (
@@ -18,10 +17,8 @@ export default function TabsLayout() {
           backgroundColor: '#FFFFFF',
           borderTopWidth: 1,
           borderTopColor: '#E9ECEF',
-          // Aumenta a altura total para 68px + a área segura, dando espaço vertical de sobra
           height: 68 + bottomInset,
           paddingTop: 8,
-          // Evita empurrar o texto demais para cima
           paddingBottom: bottomInset + 4,
         },
         tabBarItemStyle: {
@@ -32,7 +29,7 @@ export default function TabsLayout() {
         tabBarLabelStyle: {
           fontSize: 11,
           fontWeight: '600',
-          marginTop: 2, // Separa o texto do ícone
+          marginTop: 2, 
         },
       }}
     >
@@ -66,4 +63,4 @@ export default function TabsLayout() {
       />
     </Tabs>
   );
-}
+} 
