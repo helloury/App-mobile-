@@ -47,19 +47,6 @@ Aplicativo mobile de finanças pessoais, feito para ser **simples de usar e func
 - Missões diárias com marcação de concluída.
 - O progresso é guardado por dia, e o app mostra a **sequência de dias seguidos** com todas as missões concluídas.
 
-## Persistência local de dados (Etapa 4)
-
-Todos os dados são salvos no aparelho com **AsyncStorage** e permanecem disponíveis depois de fechar e reabrir o app. As operações de criar, armazenar, recuperar, atualizar, remover e apresentar dados estão implementadas nas quatro áreas do app (configuração, gastos, metas e missões).
-
-Detalhes completos (justificativa, estrutura dos dados, operações, telas e como testar) em **[docs/etapa-04.md](docs/etapa-04.md)**.
-
-### Decisões de modelagem
-- **Dinheiro em centavos** (inteiros), sem erros de ponto flutuante.
-- Categorias e metas com `id`, então renomear uma meta não quebra o histórico.
-- Valores derivados (acumulado da meta, teto calculado, sequência de missões) **nunca são salvos**, sempre calculados.
-- `dataGasto` (quando aconteceu) separada de `criadoEm` (quando foi registrado).
-- Versão do esquema de dados (`VERSAO_ESQUEMA`), preparada para futuras migrações.
-
 ## Estrutura do projeto
 
 ```
