@@ -1,10 +1,10 @@
+import React from 'react';
 import { Tabs } from 'expo-router';
-import { Platform, Text } from 'react-native';
+import { Text, Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function TabsLayout() {
   const insets = useSafeAreaInsets();
-
   const bottomInset = Platform.OS === 'android' ? Math.max(insets.bottom, 10) : insets.bottom;
 
   return (
@@ -29,7 +29,7 @@ export default function TabsLayout() {
         tabBarLabelStyle: {
           fontSize: 11,
           fontWeight: '600',
-          marginTop: 2, 
+          marginTop: 2,
         },
       }}
     >
@@ -63,4 +63,4 @@ export default function TabsLayout() {
       />
     </Tabs>
   );
-} 
+}

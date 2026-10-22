@@ -1,53 +1,95 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 import {
-  Alert,
-  Modal,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
   View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  Modal,
+  TextInput,
+  Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { categoriasStore } from '../../store/categoriasStore';
+import { gastosStore, somar } from '../../store/gastosStore';
+import { useStore } from '../../store/useStore';
+import { formatar, paraCentavos, paraTexto } from '../../utils/dinheiro';
 
 export default function Metas() {
   const insets = useSafeAreaInsets();
+  useStore(categoriasStore, gastosStore);
 
-  const [objetivos, setObjetivos] = useState([
-    { id: '1', titulo: 'Reserva de Emergência', acumulado: 1200, alvo: 3000 },
-    { id: '2', titulo: 'Troca de Aparelho', acumulado: 600, alvo: 1800 },
-    { id: '3', titulo: 'Curso de Especialização', acumulado: 400, alvo: 500 },
-  ]);
+  const metas = categoriasStore.obterMetas();
+  const gastos = gastosStore.obterGastos();
 
-  // Estados para Inserção
   const [modalVisivel, setModalVisivel] = useState(false);
   const [novoTitulo, setNovoTitulo] = useState('');
   const [novoAlvo, setNovoAlvo] = useState('');
+  const [metaEditando, setMetaEditando] = useState(null);
 
-  function adicionarMeta() {
+  // O valor acumulado NÃO é salvo: é sempre calculado a partir dos gastos da meta
+  function acumuladoDe(metaId) {
+    return somar(gastos.filter((g) => g.categoriaId === metaId));
+  }
+
+  function fecharModal() {
+    setModalVisivel(false);
+    setMetaEditando(null);
+  }
+
+  function abrirNova() {
+    setMetaEditando(null);
+    setNovoTitulo('');
+    setNovoAlvo('');
+    setModalVisivel(true);
+  }
+
+  function abrirEdicao(item) {
+    setMetaEditando(item);
+    setNovoTitulo(item.nome);
+    setNovoAlvo(paraTexto(item.alvoCentavos));
+    setModalVisivel(true);
+  }
+
+  function confirmarExclusaoMeta(item) {
+    Alert.alert(
+      'Excluir Meta',
+      `Deseja remover a meta "${item.nome}"? Os gastos já registrados continuam no histórico.`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Excluir',
+          style: 'destructive',
+          onPress: () => categoriasStore.arquivarMeta(item.id),
+        },
+      ]
+    );
+  }
+
+  function salvarMeta() {
     if (!novoTitulo.trim() || !novoAlvo.trim()) {
       Alert.alert('Aviso', 'Preencha o nome da meta e o valor alvo.');
       return;
     }
 
-    const valorNumerico = parseFloat(novoAlvo.replace(',', '.'));
-    if (isNaN(valorNumerico) || valorNumerico <= 0) {
+    const alvoCentavos = paraCentavos(novoAlvo);
+    if (alvoCentavos <= 0) {
       Alert.alert('Aviso', 'Informe um valor alvo válido.');
       return;
     }
 
-    const novaMeta = {
-      id: String(Date.now()),
-      titulo: novoTitulo,
-      acumulado: 0,
-      alvo: valorNumerico,
-    };
+    const ok = metaEditando
+      ? categoriasStore.atualizarMeta(metaEditando.id, { nome: novoTitulo, alvoCentavos })
+      : categoriasStore.adicionarMeta(novoTitulo, alvoCentavos);
 
-    setObjetivos((prev) => [...prev, novaMeta]);
+    if (!ok) {
+      Alert.alert('Aviso', 'Já existe uma meta ou categoria com esse nome.');
+      return;
+    }
+
     setNovoTitulo('');
     setNovoAlvo('');
-    setModalVisivel(false);
+    fecharModal();
   }
 
   return (
@@ -57,52 +99,79 @@ export default function Metas() {
         showsVerticalScrollIndicator={false}
       >
         <Text style={styles.tituloTela}>Cofres de Metas</Text>
+        {metas.length > 0 && (
+          <Text style={styles.dicaExcluir}>Toque para editar · Segure para excluir</Text>
+        )}
 
-        {objetivos.map((item) => {
-          const perc = Math.min((item.acumulado / item.alvo) * 100, 100);
-          return (
-            <View key={item.id} style={styles.cardMeta}>
-              <Text style={styles.tituloMeta}>{item.titulo}</Text>
-              <Text style={styles.valoresMeta}>
-                R$ {item.acumulado} de R$ {item.alvo}
-              </Text>
-              <View style={styles.barraFundo}>
-                <View style={[styles.barraProgresso, { width: `${perc}%` }]} />
-              </View>
-              <Text style={styles.textoPorcentagem}>{perc.toFixed(0)}% poupado</Text>
-            </View>
-          );
-        })}
+        {metas.length === 0 ? (
+          <View style={styles.cardVazio}>
+            <Text style={styles.textoVazio}>Nenhuma meta cadastrada.</Text>
+            <Text style={styles.subtextoVazio}>
+              Toque no botão '+' abaixo para criar um novo cofre de economia!
+            </Text>
+          </View>
+        ) : (
+          metas.map((item) => {
+            const acumulado = acumuladoDe(item.id);
+            const perc =
+              item.alvoCentavos > 0
+                ? Math.min((acumulado / item.alvoCentavos) * 100, 100)
+                : 0;
+            return (
+              <TouchableOpacity
+                key={item.id}
+                style={styles.cardMeta}
+                activeOpacity={0.7}
+                onPress={() => abrirEdicao(item)}
+                onLongPress={() => confirmarExclusaoMeta(item)}
+                delayLongPress={350}
+              >
+                <Text style={styles.tituloMeta}>{item.nome}</Text>
+                <Text style={styles.valoresMeta}>
+                  {formatar(acumulado)} de {formatar(item.alvoCentavos)}
+                </Text>
+                <View style={styles.barraFundo}>
+                  <View
+                    style={[styles.barraProgresso, { width: `${perc}%` }]}
+                  />
+                </View>
+                <Text style={styles.textoPorcentagem}>
+                  {perc.toFixed(0)}% poupado
+                </Text>
+              </TouchableOpacity>
+            );
+          })
+        )}
       </ScrollView>
 
-      {/* Botão Flutuante de '+' */}
+      {/* Botão Flutuante (FAB) */}
       <TouchableOpacity
         style={styles.botaoFlutuante}
-        onPress={() => setModalVisivel(true)}
+        onPress={abrirNova}
         activeOpacity={0.8}
       >
         <Text style={styles.iconeBotaoFlutuante}>+</Text>
       </TouchableOpacity>
 
-      {/* Modal para Inserção de Nova Meta */}
+      {/* Modal Nova Meta / Editar Meta */}
       <Modal
         animationType="fade"
         transparent={true}
         visible={modalVisivel}
-        onRequestClose={() => setModalVisivel(false)}
+        onRequestClose={fecharModal}
       >
         <View style={styles.fundoModal}>
           <View style={styles.conteudoModal}>
-            <Text style={styles.tituloModal}>Nova Meta</Text>
-
+            <Text style={styles.tituloModal}>
+              {metaEditando ? 'Editar Meta' : 'Nova Meta / Categoria'}
+            </Text>
             <TextInput
               style={styles.input}
-              placeholder="Nome da meta (ex: Novo Celular)"
+              placeholder="Nome da meta (ex: Notebook, Viagem)"
               placeholderTextColor="#ADB5BD"
               value={novoTitulo}
               onChangeText={setNovoTitulo}
             />
-
             <TextInput
               style={styles.input}
               placeholder="Valor Alvo (R$)"
@@ -111,18 +180,16 @@ export default function Metas() {
               value={novoAlvo}
               onChangeText={setNovoAlvo}
             />
-
             <View style={styles.acoesModal}>
               <TouchableOpacity
                 style={[styles.botaoModal, styles.botaoCancelar]}
-                onPress={() => setModalVisivel(false)}
+                onPress={fecharModal}
               >
                 <Text style={styles.textoBotaoCancelar}>Cancelar</Text>
               </TouchableOpacity>
-
               <TouchableOpacity
                 style={[styles.botaoModal, styles.botaoSalvar]}
-                onPress={adicionarMeta}
+                onPress={salvarMeta}
               >
                 <Text style={styles.textoBotaoSalvar}>Salvar</Text>
               </TouchableOpacity>
@@ -141,13 +208,38 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingHorizontal: 16,
-    paddingBottom: 90, // Espaço extra para a rolagem não ficar escondida atrás do botão
+    paddingBottom: 90,
   },
   tituloTela: {
     fontSize: 20,
     fontWeight: 'bold',
     color: '#212529',
     marginVertical: 14,
+  },
+  dicaExcluir: {
+    fontSize: 11,
+    color: '#ADB5BD',
+    marginBottom: 8,
+  },
+  cardVazio: {
+    backgroundColor: '#FFFFFF',
+    padding: 24,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 8,
+    elevation: 1,
+  },
+  textoVazio: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#6C757D',
+    marginBottom: 4,
+  },
+  subtextoVazio: {
+    fontSize: 12,
+    color: '#ADB5BD',
+    textAlign: 'center',
   },
   cardMeta: {
     backgroundColor: '#FFFFFF',
@@ -183,7 +275,6 @@ const styles = StyleSheet.create({
     marginTop: 6,
     textAlign: 'right',
   },
-  // Estilo do Botão Flutuante
   botaoFlutuante: {
     position: 'absolute',
     right: 20,
@@ -191,7 +282,7 @@ const styles = StyleSheet.create({
     width: 58,
     height: 58,
     borderRadius: 29,
-    backgroundColor: '#E83E8C', // Rosa Cerejeira
+    backgroundColor: '#E83E8C',
     justifyContent: 'center',
     alignItems: 'center',
     elevation: 5,
@@ -206,7 +297,6 @@ const styles = StyleSheet.create({
     fontWeight: '300',
     marginTop: -2,
   },
-  // Estilos do Modal de Adição
   fundoModal: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.45)',

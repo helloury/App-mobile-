@@ -1,47 +1,112 @@
-import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert } from 'react-native';
+import React, { useState, useRef } from 'react';
+import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  StyleSheet,
+  Alert,
+  ScrollView,
+  Modal,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
+import LottieView from 'lottie-react-native';
+
 import { gastosStore } from '../../store/gastosStore';
+import { categoriasStore } from '../../store/categoriasStore';
+import { useStore } from '../../store/useStore';
+import { paraCentavos } from '../../utils/dinheiro';
+import { gerarId } from '../../utils/id';
+import { hojeISO, ontemISO } from '../../utils/datas';
 
 export default function Registro() {
   const insets = useSafeAreaInsets();
-  const [valor, setValor] = useState('0');
-  const [categoria, setCategoria] = useState('Alimentação');
-  const [descricao, setDescricao] = useState(''); 
+  useStore(categoriasStore);
 
-  function digitar(num) {
-    setValor((prev) => (prev === '0' ? String(num) : prev + num));
+  const [valor, setValor] = useState('0');
+  const [categoriaId, setCategoriaId] = useState('cat-alimentacao');
+  const [descricao, setDescricao] = useState('');
+  const [quando, setQuando] = useState('hoje');
+  const [animacaoVisivel, setAnimacaoVisivel] = useState(false);
+  const finalizadoRef = useRef(false);
+
+  const categorias = categoriasStore.obterCategorias();
+  // Se a meta selecionada foi excluída, volta para a primeira categoria
+  const categoriaAtiva = categorias.some((c) => c.id === categoriaId)
+    ? categoriaId
+    : categorias[0].id;
+
+  function digitar(tecla) {
+    setValor((prev) => {
+      if (tecla === '.') {
+        if (prev.includes('.')) return prev;
+        return prev + '.';
+      }
+
+      if (prev.includes('.')) {
+        const partes = prev.split('.');
+        if (partes[1] && partes[1].length >= 2) return prev;
+      }
+
+      if (prev === '0') return String(tecla);
+      return prev + tecla;
+    });
   }
 
-  function limpar() {
+  function apagarUmCaractere() {
+    setValor((prev) => {
+      if (prev.length <= 1) return '0';
+      return prev.slice(0, -1);
+    });
+  }
+
+  function limparTudo() {
     setValor('0');
     setDescricao('');
+    setQuando('hoje');
+  }
+
+  function finalizar() {
+    if (finalizadoRef.current) return;
+    finalizadoRef.current = true;
+    setAnimacaoVisivel(false);
+    limparTudo();
+    router.replace('/');
   }
 
   function salvar() {
-    const valorNumerico = parseFloat(valor.replace(',', '.'));
-    if (isNaN(valorNumerico) || valorNumerico <= 0) {
+    const valorCentavos = paraCentavos(valor);
+
+    if (valorCentavos <= 0) {
       Alert.alert('Aviso', 'Digite um valor maior que zero.');
       return;
     }
 
-    // descrição opcional
-    const tituloFinal = descricao.trim().length > 0 
-      ? descricao.trim() 
-      : `Gasto em ${categoria}`;
-    //registro manual
-    const novoGasto = {
-      id: String(Date.now()),
-      titulo: tituloFinal,
-      categoria: categoria,
-      valor: valorNumerico,
-      data: 'Hoje',
-    };
+    const tituloFinal =
+      descricao.trim().length > 0
+        ? descricao.trim()
+        : `Gasto em ${categoriasStore.nomeDe(categoriaAtiva)}`;
 
-    gastosStore.adicionarGasto(novoGasto);
-    limpar();
-    router.replace('/');
+    gastosStore.adicionarGasto({
+      id: gerarId(),
+      titulo: tituloFinal,
+      categoriaId: categoriaAtiva,
+      valorCentavos,
+      dataGasto: quando === 'ontem' ? ontemISO() : hojeISO(),
+    });
+
+    finalizadoRef.current = false;
+
+    if (categoriasStore.ehMeta(categoriaAtiva)) {
+      setAnimacaoVisivel(true);
+      // Temporizador de segurança: encerra a tela após 2.2 segundos mesmo se o Lottie travar
+      setTimeout(() => {
+        finalizar();
+      }, 2200);
+    } else {
+      finalizar();
+    }
   }
 
   function abrirCameraOCR() {
@@ -53,13 +118,19 @@ export default function Registro() {
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
+      {/* Botão OCR */}
+      <TouchableOpacity style={styles.botaoCamera} onPress={abrirCameraOCR} activeOpacity={0.8}>
+        <Text style={styles.iconeCamera}>📷</Text>
+        <Text style={styles.textoBotaoCamera}>Fotografar Anotação</Text>
+      </TouchableOpacity>
+
       {/* Visor Numérico */}
       <View style={styles.display}>
         <Text style={styles.moeda}>R$</Text>
         <Text style={styles.valorDisplay}>{valor}</Text>
       </View>
 
-      {/* Campo de Descrição */}
+      {/* Descrição Opcional */}
       <View style={styles.campoDescricaoWrapper}>
         <TextInput
           style={styles.inputDescricao}
@@ -71,26 +142,49 @@ export default function Registro() {
         />
       </View>
 
-      {/* Categorias */}
-      <View style={styles.opcoesContainer}>
-        {['Alimentação', 'Transporte', 'Lazer', 'Contas'].map((item) => (
+      {/* Quando o gasto aconteceu */}
+      <View style={styles.linhaData}>
+        {[
+          ['hoje', 'Hoje'],
+          ['ontem', 'Ontem'],
+        ].map(([chave, rotulo]) => (
           <TouchableOpacity
-            key={item}
-            style={[styles.botaoCategoria, categoria === item && styles.botaoCategoriaAtivo]}
-            onPress={() => setCategoria(item)}
+            key={chave}
+            style={[styles.chipData, quando === chave && styles.chipDataAtivo]}
+            onPress={() => setQuando(chave)}
           >
-            <Text style={[styles.textoCategoria, categoria === item && styles.textoCategoriaAtivo]}>
-              {item}
+            <Text style={[styles.textoChipData, quando === chave && styles.textoChipDataAtivo]}>
+              {rotulo}
             </Text>
           </TouchableOpacity>
         ))}
       </View>
 
-      {/* Botão OCR */}
-      <TouchableOpacity style={styles.botaoCamera} onPress={abrirCameraOCR}>
-        <Text style={styles.iconeCamera}>📷</Text>
-        <Text style={styles.textoBotaoCamera}>Fotografar Anotação / Recibo (OCR)</Text>
-      </TouchableOpacity>
+      {/* Categorias (Inclui as Metas criadas como categorias) */}
+      <View style={styles.opcoesWrapper}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.opcoesContainer}
+        >
+          {categorias.map((item) => (
+            <TouchableOpacity
+              key={item.id}
+              style={[styles.botaoCategoria, categoriaAtiva === item.id && styles.botaoCategoriaAtivo]}
+              onPress={() => setCategoriaId(item.id)}
+            >
+              <Text
+                style={[
+                  styles.textoCategoria,
+                  categoriaAtiva === item.id && styles.textoCategoriaAtivo,
+                ]}
+              >
+                {item.nome}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      </View>
 
       {/* Teclado Numérico */}
       <View style={styles.teclado}>
@@ -98,27 +192,52 @@ export default function Registro() {
           [1, 2, 3],
           [4, 5, 6],
           [7, 8, 9],
-          ['C', 0, 'OK'],
+          ['.', 0, '⌫'],
         ].map((linha, indexLinha) => (
           <View key={indexLinha} style={styles.linhaTeclado}>
             {linha.map((tecla) => (
               <TouchableOpacity
                 key={tecla}
-                style={[styles.tecla, tecla === 'OK' && styles.teclaSalvar]}
+                style={[styles.tecla, tecla === '⌫' && styles.teclaApagar]}
                 onPress={() => {
-                  if (tecla === 'C') limpar();
-                  else if (tecla === 'OK') salvar();
-                  else digitar(tecla);
+                  if (tecla === '⌫') {
+                    apagarUmCaractere();
+                  } else {
+                    digitar(tecla);
+                  }
                 }}
               >
-                <Text style={[styles.textoTecla, tecla === 'OK' && styles.textoTeclaSalvar]}>
+                <Text style={[styles.textoTecla, tecla === '⌫' && styles.textoTeclaApagar]}>
                   {tecla}
                 </Text>
               </TouchableOpacity>
             ))}
           </View>
         ))}
+
+        <View style={styles.linhaAcoesInferiores}>
+          <TouchableOpacity style={styles.botaoLimparTudo} onPress={limparTudo}>
+            <Text style={styles.textoBotaoLimparTudo}>C (Limpar)</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.botaoConfirmarRegistro} onPress={salvar}>
+            <Text style={styles.textoBotaoConfirmarRegistro}>Confirmar Registro (OK)</Text>
+          </TouchableOpacity>
+        </View>
       </View>
+
+      {/* Modal da Animação Lottie */}
+      <Modal visible={animacaoVisivel} transparent={true} animationType="fade">
+        <View style={styles.containerModalAnimacao}>
+          <LottieView
+            source={require('../../../assets/animacao-meta.json')}
+            autoPlay
+            loop={false}
+            onAnimationFinish={finalizar}
+            style={styles.lottieAnimacao}
+          />
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -129,28 +248,49 @@ const styles = StyleSheet.create({
     backgroundColor: '#FAFAFA',
     paddingHorizontal: 16,
     justifyContent: 'space-between',
-    paddingBottom: 12,
+    paddingBottom: 14,
   },
-  display: {
+  botaoCamera: {
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 6,
-    marginBottom: 4,
-  },
-  moeda: {
-    fontSize: 18,
-    color: '#6C757D',
-    fontWeight: 'bold',
-  },
-  valorDisplay: {
-    fontSize: 42,
-    fontWeight: 'bold',
-    color: '#212529',
-  },
-  campoDescricaoWrapper: {
-    paddingHorizontal: 6,
+    backgroundColor: '#FFF0F5',
+    borderWidth: 1.5,
+    borderColor: '#E83E8C',
+    borderRadius: 10,
+    paddingVertical: 9,
+    marginHorizontal: 4,
+    marginTop: 46,
     marginBottom: 6,
+    gap: 8,
   },
+  iconeCamera: {
+    fontSize: 15
+    },
+  textoBotaoCamera: {
+     fontSize: 13,
+      fontWeight: '700',
+      color: '#E83E8C' 
+      },
+  display: {
+     alignItems: 'center',
+      justifyContent: 'center', 
+      marginVertical: 4
+     },
+  moeda: {
+   fontSize: 18,
+   color: '#6C757D', 
+   fontWeight: 'bold' 
+  },
+  valorDisplay: { 
+    fontSize: 42, 
+    fontWeight: 'bold',
+     color: '#212529'
+     },
+  campoDescricaoWrapper: { 
+    paddingHorizontal: 6,
+     marginBottom: 6
+     },
   inputDescricao: {
     height: 38,
     backgroundColor: '#FFFFFF',
@@ -162,59 +302,41 @@ const styles = StyleSheet.create({
     color: '#212529',
     textAlign: 'center',
   },
-  opcoesContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'center',
-    gap: 8,
-    marginBottom: 8,
-  },
-  botaoCategoria: {
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 16,
-    backgroundColor: '#F1F3F5',
-  },
-  botaoCategoriaAtivo: {
-    backgroundColor: '#E83E8C',
-  },
-  textoCategoria: {
-    fontSize: 12,
-    color: '#495057',
-  },
-  textoCategoriaAtivo: {
-    color: '#FFF',
-    fontWeight: 'bold',
-  },
-  botaoCamera: {
-    flexDirection: 'row',
+  opcoesWrapper: { 
+    height: 40,
+     marginBottom: 6
+     },
+  opcoesContainer: { 
+    flexDirection: 'row', 
     alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#FFF0F5',
-    borderWidth: 1.5,
-    borderColor: '#E83E8C',
-    borderRadius: 10,
-    paddingVertical: 8,
-    marginHorizontal: 4,
-    marginBottom: 8,
-    gap: 8,
+     gap: 8, 
+     paddingHorizontal: 4
+     },
+  botaoCategoria: { 
+    paddingHorizontal: 14,
+     paddingVertical: 7, 
+     borderRadius: 16, 
+     backgroundColor: '#F1F3F5'
+     },
+  botaoCategoriaAtivo: { 
+    backgroundColor: '#E83E8C'
+   },
+  textoCategoria: { 
+    fontSize: 12, 
+    color: '#495057' 
   },
-  iconeCamera: {
-    fontSize: 15,
-  },
-  textoBotaoCamera: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#E83E8C',
-  },
-  teclado: {
-    width: '100%',
-  },
-  linhaTeclado: {
+  textoCategoriaAtivo: { 
+    color: '#FFFFFF', 
+    fontWeight: 'bold'
+   },
+  teclado: { 
+    width: '100%'
+   },
+  linhaTeclado: { 
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 6,
-  },
+     justifyContent: 'space-between',
+      marginBottom: 6 
+    },
   tecla: {
     flex: 1,
     marginHorizontal: 4,
@@ -225,15 +347,66 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  teclaSalvar: {
+  teclaApagar: { 
+    backgroundColor: '#FFF5F5'
+   },
+  textoTecla: { 
+    fontSize: 20,
+     fontWeight: 'bold',
+      color: '#212529'
+     },
+  textoTeclaApagar: {
+     fontSize: 22,
+      color: '#DC3545'
+     },
+  linhaAcoesInferiores: { 
+    flexDirection: 'row', 
+    gap: 8, 
+    marginHorizontal: 4, 
+    marginTop: 2
+   },
+  botaoLimparTudo: {
+    width: '30%',
+    height: 46,
+    backgroundColor: '#F8F9FA',
+    borderWidth: 1,
+    borderColor: '#DEE2E6',
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  textoBotaoLimparTudo: { 
+    fontSize: 13, 
+    fontWeight: 'bold', 
+    color: '#6C757D'
+   },
+  botaoConfirmarRegistro: {
+    flex: 1,
+    height: 46,
     backgroundColor: '#E83E8C',
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 1,
   },
-  textoTecla: {
-    fontSize: 19,
-    fontWeight: 'bold',
-    color: '#212529',
+  textoBotaoConfirmarRegistro: {
+     color: '#FFFFFF', 
+     fontSize: 14, 
+     fontWeight: 'bold' 
+    },
+  containerModalAnimacao: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.65)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  textoTeclaSalvar: {
-    color: '#FFF',
-  },
+  lottieAnimacao: { 
+    width: 280,
+     height: 280 
+    },
+  linhaData: { flexDirection: 'row', justifyContent: 'center', gap: 8, marginBottom: 6 },
+  chipData: { paddingHorizontal: 16, paddingVertical: 5, borderRadius: 14, backgroundColor: '#F1F3F5' },
+  chipDataAtivo: { backgroundColor: '#FFD6E5' },
+  textoChipData: { fontSize: 12, color: '#495057' },
+  textoChipDataAtivo: { color: '#E83E8C', fontWeight: 'bold' },
 });

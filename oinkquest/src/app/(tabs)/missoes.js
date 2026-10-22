@@ -1,21 +1,14 @@
-import { useState } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { missoesStore } from '../../store/missoesStore';
+import { useStore } from '../../store/useStore';
 
 export default function Missoes() {
   const insets = useSafeAreaInsets();
+  useStore(missoesStore);
 
-  const [tarefas, setTarefas] = useState([
-    { id: '1', titulo: 'Dia Sem Delivery', desc: 'Faça refeições em casa hoje.', concluida: false },
-    { id: '2', titulo: 'Registrar Todas as Compras', desc: 'Anote cada saída do dia no app.', concluida: true },
-    { id: '3', titulo: 'Revisar Assinaturas', desc: 'Verifique se há gastos automáticos esquecidos.', concluida: false },
-  ]);
-
-  function alternarMissao(id) {
-    setTarefas((prev) =>
-      prev.map((t) => (t.id === id ? { ...t, concluida: !t.concluida } : t))
-    );
-  }
+  const tarefas = missoesStore.obterMissoesHoje();
+  const sequencia = missoesStore.obterSequencia();
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -24,6 +17,11 @@ export default function Missoes() {
         showsVerticalScrollIndicator={false}
       >
         <Text style={styles.tituloTela}>Missões do Dia</Text>
+        <Text style={styles.textoSequencia}>
+          {sequencia > 0
+            ? `🔥 ${sequencia} ${sequencia === 1 ? 'dia seguido' : 'dias seguidos'} com todas as missões`
+            : 'Conclua todas as missões de hoje para iniciar uma sequência.'}
+        </Text>
 
         {tarefas.map((item) => (
           <View key={item.id} style={[styles.cardMissao, item.concluida && styles.cardConcluido]}>
@@ -35,7 +33,7 @@ export default function Missoes() {
             </View>
             <TouchableOpacity
               style={[styles.botaoCheck, item.concluida && styles.botaoCheckAtivo]}
-              onPress={() => alternarMissao(item.id)}
+              onPress={() => missoesStore.alternar(item.id)}
             >
               <Text style={styles.textoCheck}>{item.concluida ? '✓' : ''}</Text>
             </TouchableOpacity>
@@ -110,4 +108,5 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     fontSize: 14,
   },
+  textoSequencia: { fontSize: 12, color: '#6C757D', marginBottom: 12 },
 });

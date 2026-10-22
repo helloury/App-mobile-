@@ -10,6 +10,9 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
+import { configStore } from '../store/configStore';
+import { paraCentavos, formatar } from '../utils/dinheiro';
+import { gerarId } from '../utils/id';
 
 export default function Onboarding() {
   const insets = useSafeAreaInsets();
@@ -31,11 +34,8 @@ export default function Onboarding() {
   const [diaVirada, setDiaVirada] = useState(1);
 
   // Auxiliares de Cálculo
-  const parseNum = (txt) => {
-    if (!txt) return 0;
-    const n = parseFloat(String(txt).replace(',', '.'));
-    return isNaN(n) ? 0 : n;
-  };
+  // Todos os valores internos são em CENTAVOS (inteiros)
+  const parseNum = (txt) => paraCentavos(txt);
 
   const totalRendas = useMemo(() => {
     const sal = parseNum(salario);
@@ -63,24 +63,40 @@ export default function Onboarding() {
       Alert.alert('Aviso', 'Digite um valor válido para a renda extra.');
       return;
     }
-    setRendasExtras((prev) => [...prev, { id: String(Date.now()), valor: v }]);
+    setRendasExtras((prev) => [...prev, { id: gerarId(), valor: v }]);
     setValorExtraTemp('');
     setMostrarCampoExtra(false);
   }
 
   function concluir() {
-    router.replace({
-      pathname: '/',
-      params: {
-        salario: salario || '0',
-        rendaExtraTotal: rendasExtras.reduce((acc, curr) => acc + curr.valor, 0).toString(),
-        moradia: gastosFixos.moradia || '0',
-        contas: gastosFixos.contas || '0',
-        streamings: gastosFixos.streamings || '0',
-        tetoLivre: tetoCalculado.toString(),
-        diaVirada: diaVirada.toString(),
-      },
+    // Salva a configuração no armazenamento local (valores em centavos)
+    const lancamentosFixos = [];
+    rendasExtras.forEach((r, idx) =>
+      lancamentosFixos.push({
+        id: gerarId(),
+        tipo: 'renda',
+        grupo: 'extra',
+        descricao: `Renda extra #${idx + 1}`,
+        valorCentavos: r.valor,
+      })
+    );
+    [
+      ['moradia', 'Aluguel / Moradia'],
+      ['contas', 'Contas básicas'],
+      ['streamings', 'Assinaturas e planos'],
+    ].forEach(([grupo, descricao]) => {
+      const v = parseNum(gastosFixos[grupo]);
+      if (v > 0) {
+        lancamentosFixos.push({ id: gerarId(), tipo: 'gasto', grupo, descricao, valorCentavos: v });
+      }
     });
+
+    configStore.concluirOnboarding({
+      salarioCentavos: parseNum(salario),
+      lancamentosFixos,
+      diaVirada,
+    });
+    router.replace('/');
   }
 
   return (
@@ -118,7 +134,7 @@ export default function Onboarding() {
           {rendasExtras.map((item, idx) => (
             <View key={item.id} style={styles.linhaExtra}>
               <Text style={styles.textoLinhaExtra}>+ Renda Extra #{idx + 1}</Text>
-              <Text style={styles.valorLinhaExtra}>R$ {item.valor.toFixed(2)}</Text>
+              <Text style={styles.valorLinhaExtra}>{formatar(item.valor)}</Text>
             </View>
           ))}
 
@@ -211,7 +227,7 @@ export default function Onboarding() {
 
           {/* Visor Fixo Não Clicável */}
           <View style={styles.visorTetoFixo}>
-            <Text style={styles.valorTetoFixo}>R$ {tetoCalculado.toFixed(2)}</Text>
+            <Text style={styles.valorTetoFixo}>{formatar(tetoCalculado)}</Text>
             <Text style={styles.subtextoTeto}>Valor estimado disponível para gastos diários</Text>
           </View>
 
@@ -220,8 +236,8 @@ export default function Onboarding() {
             <View style={[styles.barraComprometida, { width: `${percComprometido}%` }]} />
           </View>
           <View style={styles.legendaProporcao}>
-            <Text style={styles.txtLegenda}>Comprometido: R$ {totalGastosFixos.toFixed(2)}</Text>
-            <Text style={styles.txtLegenda}>Renda Total: R$ {totalRendas.toFixed(2)}</Text>
+            <Text style={styles.txtLegenda}>Comprometido: {formatar(totalGastosFixos)}</Text>
+            <Text style={styles.txtLegenda}>Renda Total: {formatar(totalRendas)}</Text>
           </View>
         </View>
 
