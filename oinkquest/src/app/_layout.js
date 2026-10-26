@@ -44,6 +44,7 @@ export default function RootLayout() {
     <View style={styles.root}>
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="onboarding" />
+        <Stack.Screen name="configurar" options={{ presentation: 'modal' }} />
         <Stack.Screen name="(tabs)" />
       </Stack>
     </View>

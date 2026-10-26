@@ -3,7 +3,7 @@ import { CHAVES, carregarDado, salvarDado } from './storage';
 // Config:
 //  - salarioCentavos
 //  - lancamentosFixos: [{ id, tipo: 'renda' | 'gasto', grupo: 'extra' | 'moradia' | 'contas' | 'streamings', descricao, valorCentavos }]
-//  - tetoManualCentavos: null = usar o teto calculado; número = teto definido pelo usuário
+//  - tetoManualCentavos: campo antigo, ignorado. O teto é sempre calculado (renda − gastos fixos).
 //  - diaVirada: dia do mês em que o ciclo reinicia
 const PADRAO = {
   onboardingConcluido: false,
@@ -16,9 +16,11 @@ const PADRAO = {
 let config = { ...PADRAO };
 const ouvintes = new Set();
 
+// Retorna a promessa do salvamento, para quem precisar esperar o dado estar gravado.
 function persistir() {
-  salvarDado(CHAVES.config, config);
+  const gravacao = salvarDado(CHAVES.config, config);
   ouvintes.forEach((fn) => fn());
+  return gravacao;
 }
 
 // Valores derivados: nunca são salvos, sempre calculados a partir dos lançamentos.
@@ -29,7 +31,6 @@ export function calcularResumo(cfg) {
   const gastosFixos = soma((l) => l.tipo === 'gasto');
   const rendaTotal = cfg.salarioCentavos + rendasExtras;
   const tetoCalculado = Math.max(0, rendaTotal - gastosFixos);
-  const manual = cfg.tetoManualCentavos !== null && cfg.tetoManualCentavos !== undefined;
   return {
     rendaTotal,
     gastosFixos,
@@ -37,8 +38,7 @@ export function calcularResumo(cfg) {
     contas: soma((l) => l.grupo === 'contas'),
     streamings: soma((l) => l.grupo === 'streamings'),
     tetoCalculado,
-    tetoManual: manual,
-    teto: manual ? cfg.tetoManualCentavos : tetoCalculado,
+    teto: tetoCalculado,
   };
 }
 
@@ -64,12 +64,13 @@ export const configStore = {
       diaVirada,
       onboardingConcluido: true,
     };
-    persistir();
+    return persistir();
   },
-  // UPDATE (null volta para o teto calculado automaticamente)
-  definirTetoManual(centavos) {
-    config = { ...config, tetoManualCentavos: centavos };
-    persistir();
+  // UPDATE (tela "Editar configuração"): troca renda, gastos fixos e dia de virada.
+  // O teto não é gravado: é recalculado a partir desses valores.
+  atualizarConfiguracao({ salarioCentavos, lancamentosFixos, diaVirada }) {
+    config = { ...config, salarioCentavos, lancamentosFixos, diaVirada, tetoManualCentavos: null };
+    return persistir();
   },
 
   // Backup

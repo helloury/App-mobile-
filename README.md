@@ -10,6 +10,9 @@ Aplicativo mobile de finanças pessoais, feito para ser **simples de usar e func
 | Expo Router | Navegação entre telas (pilha + abas) |
 | AsyncStorage (`@react-native-async-storage/async-storage`) | **Persistência local dos dados** |
 | Lottie (`lottie-react-native`) | Animação do porquinho ao registrar gasto em uma meta |
+| expo-image-picker | Câmera e galeria para fotografar anotações |
+| Node.js (`backend/`, sem dependências) | Backend que recebe a foto e a envia ao Gemini |
+| Google Gemini API | Leitura (OCR) das anotações de gastos |
 | react-native-safe-area-context | Áreas seguras de tela |
 
 ## Funcionalidades implementadas até agora
@@ -19,7 +22,7 @@ Aplicativo mobile de finanças pessoais, feito para ser **simples de usar e func
 - Cadastro de gastos fixos: moradia, contas básicas e assinaturas.
 - Cálculo automático do **teto mensal livre** (renda total − gastos fixos).
 - Escolha do **dia de virada do mês** (1 a 31), que define o ciclo de gastos.
-- Aparece só na primeira vez. Depois o app abre direto no Painel.
+- Aparece só na primeira vez (dá para pular deixando em branco e configurar depois). Depois o app abre direto no Painel.
 
 ### Painel
 - Dinheiro disponível, teto mensal e barra de progresso com cores (verde, amarelo, vermelho).
@@ -36,7 +39,7 @@ Aplicativo mobile de finanças pessoais, feito para ser **simples de usar e func
 - Data do gasto: Hoje ou Ontem.
 - As metas criadas aparecem como categorias.
 - Ao registrar um gasto em uma meta, toca a animação do porquinho (Lottie).
-- Botão de leitura por câmera (OCR) ainda é apenas um protótipo.
+- **Leitura de anotação por foto :** fotografe (ou escolha da galeria) uma anotação de gastos; o backend lê com o Gemini, você confere e corrige os itens e só então eles são salvos.
 
 ### Metas
 - Criação de cofres com nome e valor alvo.
@@ -47,19 +50,6 @@ Aplicativo mobile de finanças pessoais, feito para ser **simples de usar e func
 - Missões diárias com marcação de concluída.
 - O progresso é guardado por dia, e o app mostra a **sequência de dias seguidos** com todas as missões concluídas.
 
-## Persistência local de dados (Etapa 4)
-
-Todos os dados são salvos no aparelho com **AsyncStorage** e permanecem disponíveis depois de fechar e reabrir o app. As operações de criar, armazenar, recuperar, atualizar, remover e apresentar dados estão implementadas nas quatro áreas do app (configuração, gastos, metas e missões).
-
-Detalhes completos (justificativa, estrutura dos dados, operações, telas e como testar) em **[docs/etapa-04.md](docs/etapa-04.md)**.
-
-### Decisões de modelagem
-- **Dinheiro em centavos** (inteiros), sem erros de ponto flutuante.
-- Categorias e metas com `id`, então renomear uma meta não quebra o histórico.
-- Valores derivados (acumulado da meta, teto calculado, sequência de missões) **nunca são salvos**, sempre calculados.
-- `dataGasto` (quando aconteceu) separada de `criadoEm` (quando foi registrado).
-- Versão do esquema de dados (`VERSAO_ESQUEMA`), preparada para futuras migrações.
-
 ## Estrutura do projeto
 
 ```
@@ -67,6 +57,7 @@ src/
 ├── app/
 │   ├── _layout.js            # carrega os dados salvos ao abrir o app
 │   ├── onboarding.js         # configuração inicial
+│   ├── configurar.js         # editar configuração (aberta pelo Painel)
 │   └── (tabs)/
 │       ├── _layout.js        # abas
 │       ├── index.js          # Painel
@@ -81,19 +72,48 @@ src/
 │   ├── missoesStore.js       # progresso das missões
 │   ├── backup.js             # exportar/restaurar
 │   └── useStore.js           # hook que atualiza a tela quando os dados mudam
+├── services/
+│   └── leituraAnotacao.js    # chamada ao backend (timeout, erros em português)
+├── components/
+│   ├── FormConfiguracao.js   # formulário usado no onboarding e na edição
+│   └── RevisaoLeitura.js     # tela de conferência dos itens lidos
+├── config/
+│   └── api.js                # endereço do backend
 └── utils/
     ├── dinheiro.js           # centavos <-> "R$ 12,50"
     ├── datas.js              # datas e cálculo do ciclo
     └── id.js                 # geração de identificadores
+
+backend/                       # (fica ao lado de src/, dentro de oinkquest/)
+├── server.js                 # servidor HTTP: /saude e /api/ler-anotacao
+├── lib/
+│   ├── gemini.js             # chamada à API do Gemini
+│   └── validar.js            # validação da entrada e normalização da saída
+├── test/backend.test.js      # testes automatizados (node --test)
+└── .env.example              # modelo de configuração (a chave real fica em .env)
 ```
 
 ## Como executar
 
+**1. Backend** (precisa do Node 20.6+ e de uma chave gratuita do Gemini em https://aistudio.google.com/apikey):
+
 ```bash
+cd oinkquest/backend
+cp .env.example .env        # edite o .env e cole a GEMINI_API_KEY
+npm start                   # sobe em http://localhost:3000
+```
+
+**2. App:**
+
+```bash
+cd oinkquest
 npm install
-npx expo install @react-native-async-storage/async-storage
+npx expo install @react-native-async-storage/async-storage expo-image-picker
+cp .env.example .env        # ajuste EXPO_PUBLIC_API_URL para o IP do seu computador
 npx expo start
 ```
+
+Celular e computador precisam estar na mesma rede Wi-Fi. Para testar o backend sozinho: `cd oinkquest/backend && npm test`.
 
 ## Autora
 

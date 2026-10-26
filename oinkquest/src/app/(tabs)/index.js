@@ -11,6 +11,7 @@ import {
   Share,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { router } from 'expo-router';
 import { gastosStore, somar } from '../../store/gastosStore';
 import { categoriasStore } from '../../store/categoriasStore';
 import { configStore, calcularResumo } from '../../store/configStore';
@@ -38,8 +39,6 @@ export default function Dashboard() {
   const diaCiclo = config.diaVirada;
   const ciclo = cicloContendo(hojeISO(), diaCiclo);
 
-  const [modalTetoVisivel, setModalTetoVisivel] = useState(false);
-  const [novoTetoInput, setNovoTetoInput] = useState('');
   const [categoriaSelecionada, setCategoriaSelecionada] = useState(null);
 
   const [gastoEditando, setGastoEditando] = useState(null);
@@ -85,22 +84,6 @@ export default function Dashboard() {
     .sort((a, b) => b.dataGasto.localeCompare(a.dataGasto) || b.criadoEm - a.criadoEm);
 
   const nomeFiltro = categoriaSelecionada ? categoriasStore.nomeDe(categoriaSelecionada) : null;
-
-  function salvarNovoTeto() {
-    if (!novoTetoInput.trim()) {
-      Alert.alert('Aviso', 'Informe um valor de teto válido.');
-      return;
-    }
-    configStore.definirTetoManual(paraCentavos(novoTetoInput));
-    setNovoTetoInput('');
-    setModalTetoVisivel(false);
-  }
-
-  function usarTetoAutomatico() {
-    configStore.definirTetoManual(null);
-    setNovoTetoInput('');
-    setModalTetoVisivel(false);
-  }
 
   function abrirEdicaoGasto(item) {
     setGastoEditando(item);
@@ -210,17 +193,12 @@ export default function Dashboard() {
               </Text>
             </View>
 
-            <TouchableOpacity
-              style={styles.blocoLimite}
-              onPress={() => setModalTetoVisivel(true)}
-              activeOpacity={0.7}
-            >
+            <View style={styles.blocoLimite}>
               <View style={styles.linhaRotuloEditar}>
                 <Text style={styles.labelLimite}>Teto Mensal</Text>
-                <Text style={styles.iconeEditar}> ✏️</Text>
               </View>
               <Text style={styles.valorLimite}>{formatar(limiteMensal)}</Text>
-            </TouchableOpacity>
+            </View>
           </View>
           <View style={styles.trilhoBarra}>
             <View
@@ -235,20 +213,12 @@ export default function Dashboard() {
             <Text style={styles.textoPorcentagem}>
               {limiteMensal > 0
                 ? `${porcentagemDisponivel.toFixed(0)}% restante do orçamento`
-                : 'Nenhum teto configurado'}
+                : 'Configure sua renda para calcular o teto'}
             </Text>
             <Text style={styles.textoGastoTotal}>Total Gasto: {formatar(totalGasto)}</Text>
           </View>
 
-          {limiteMensal === 0 ? (
-            <TouchableOpacity
-              style={styles.botaoDefinirTeto}
-              onPress={() => setModalTetoVisivel(true)}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.textoBotaoDefinirTeto}>+ Definir Teto do Mês</Text>
-            </TouchableOpacity>
-          ) : (
+          {limiteMensal > 0 && (
             <TouchableOpacity
               style={styles.botaoAnalise}
               onPress={abrirAnaliseMeses}
@@ -261,9 +231,18 @@ export default function Dashboard() {
         </View>
 
         {/* Resumo do Ciclo */}
-        <View style={styles.cardParametros}>
+        <TouchableOpacity
+          style={styles.cardParametros}
+          onPress={() => router.push('/configurar')}
+          activeOpacity={0.8}
+          accessibilityRole="button"
+          accessibilityLabel="Editar configuração de renda, gastos fixos e dia de virada"
+        >
           <Text style={styles.tituloParametros}>
-            Ciclo atual: {rotuloCiclo(ciclo)} (vira dia {diaCiclo})
+            Ciclo atual: {rotuloCiclo(ciclo)} (vira dia {diaCiclo}) ✏️
+          </Text>
+          <Text style={{ fontSize: 11, color: '#6C757D', marginBottom: 8 }}>
+            Toque para editar renda, gastos fixos e dia de virada
           </Text>
           <View style={styles.gradeParametros}>
             <View style={styles.itemParametro}>
@@ -283,7 +262,7 @@ export default function Dashboard() {
               <Text style={styles.dadoParametro}>{formatar(resumo.streamings)}</Text>
             </View>
           </View>
-        </View>
+        </TouchableOpacity>
 
         {/* Categorias de Gastos */}
         <View style={styles.secaoTituloLinha}>
@@ -469,56 +448,6 @@ export default function Dashboard() {
                 onPress={salvarEdicaoGasto}
               >
                 <Text style={styles.textoBotaoSalvarModal}>Salvar</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Modal para Ajuste do Teto */}
-      <Modal
-        animationType="fade"
-        transparent={true}
-        visible={modalTetoVisivel}
-        onRequestClose={() => setModalTetoVisivel(false)}
-      >
-        <View style={styles.fundoModal}>
-          <View style={styles.conteudoModal}>
-            <Text style={styles.tituloModal}>Definir Teto Mensal</Text>
-            <Text style={styles.subtituloModal}>
-              Insira o limite total livre que você pretende gastar neste ciclo.
-              {'\n'}Cálculo automático (renda − gastos fixos): {formatar(resumo.tetoCalculado)}
-            </Text>
-
-            <TextInput
-              style={styles.inputModal}
-              placeholder="R$ 0,00"
-              placeholderTextColor="#ADB5BD"
-              keyboardType="numeric"
-              value={novoTetoInput}
-              onChangeText={setNovoTetoInput}
-              autoFocus={true}
-            />
-
-            {resumo.tetoManual && (
-              <TouchableOpacity onPress={usarTetoAutomatico}>
-                <Text style={styles.linkAutomatico}>Voltar ao teto automático</Text>
-              </TouchableOpacity>
-            )}
-
-            <View style={styles.acoesModal}>
-              <TouchableOpacity
-                style={[styles.botaoModal, styles.botaoCancelarModal]}
-                onPress={() => setModalTetoVisivel(false)}
-              >
-                <Text style={styles.textoBotaoCancelarModal}>Cancelar</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.botaoModal, styles.botaoSalvarModal]}
-                onPress={salvarNovoTeto}
-              >
-                <Text style={styles.textoBotaoSalvarModal}>Salvar Teto</Text>
               </TouchableOpacity>
             </View>
           </View>

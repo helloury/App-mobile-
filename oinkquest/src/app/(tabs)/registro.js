@@ -8,10 +8,12 @@ import {
   Alert,
   ScrollView,
   Modal,
+  ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import LottieView from 'lottie-react-native';
+import * as ImagePicker from 'expo-image-picker';
 
 import { gastosStore } from '../../store/gastosStore';
 import { categoriasStore } from '../../store/categoriasStore';
@@ -19,6 +21,8 @@ import { useStore } from '../../store/useStore';
 import { paraCentavos } from '../../utils/dinheiro';
 import { gerarId } from '../../utils/id';
 import { hojeISO, ontemISO } from '../../utils/datas';
+import { lerAnotacao, ErroLeitura } from '../../services/leituraAnotacao';
+import RevisaoLeitura from '../../components/RevisaoLeitura';
 
 export default function Registro() {
   const insets = useSafeAreaInsets();
@@ -30,6 +34,8 @@ export default function Registro() {
   const [quando, setQuando] = useState('hoje');
   const [animacaoVisivel, setAnimacaoVisivel] = useState(false);
   const finalizadoRef = useRef(false);
+  const [lendo, setLendo] = useState(false);
+  const [itensLidos, setItensLidos] = useState(null); // null = revisão fechada
 
   const categorias = categoriasStore.obterCategorias();
   // Se a meta selecionada foi excluída, volta para a primeira categoria
@@ -109,10 +115,77 @@ export default function Registro() {
     }
   }
 
+  // Fluxo da câmera: escolher origem -> foto -> backend lê -> usuário revisa -> salva
   function abrirCameraOCR() {
+    Alert.alert('Ler anotação', 'De onde vem a foto?', [
+      { text: 'Tirar foto', onPress: () => escolherFoto('camera') },
+      { text: 'Galeria', onPress: () => escolherFoto('galeria') },
+      { text: 'Cancelar', style: 'cancel' },
+    ]);
+  }
+
+  async function escolherFoto(origem) {
+    try {
+      const opcoes = { mediaTypes: ['images'], quality: 0.5, base64: true };
+      let resultado;
+      if (origem === 'camera') {
+        const permissao = await ImagePicker.requestCameraPermissionsAsync();
+        if (!permissao.granted) {
+          Alert.alert(
+            'Permissão necessária',
+            'Para fotografar a anotação, permita o uso da câmera nas configurações do celular. Você ainda pode escolher uma foto da galeria ou digitar o valor.'
+          );
+          return;
+        }
+        resultado = await ImagePicker.launchCameraAsync(opcoes);
+      } else {
+        resultado = await ImagePicker.launchImageLibraryAsync(opcoes);
+      }
+      if (resultado.canceled) return;
+
+      const foto = resultado.assets?.[0];
+      if (!foto?.base64) {
+        Alert.alert('Foto inválida', 'Não foi possível ler essa imagem. Tente outra.');
+        return;
+      }
+
+      setLendo(true);
+      const itens = await lerAnotacao({ base64: foto.base64, mimeType: foto.mimeType || 'image/jpeg' });
+      setLendo(false);
+
+      if (itens.length === 0) {
+        Alert.alert(
+          'Nada encontrado',
+          'Não consegui achar gastos nessa foto. Tente uma foto mais nítida, com boa luz, ou digite o valor.'
+        );
+        return;
+      }
+      setItensLidos(itens);
+    } catch (e) {
+      setLendo(false);
+      Alert.alert(
+        'Não foi possível ler',
+        e instanceof ErroLeitura ? e.message : 'Algo deu errado ao abrir a foto. Tente novamente.'
+      );
+    }
+  }
+
+  function salvarLidos(itens) {
+    const hoje = hojeISO();
+    itens.forEach((it) =>
+      gastosStore.adicionarGasto({
+        id: gerarId(),
+        titulo: it.descricao,
+        categoriaId: it.categoriaId,
+        valorCentavos: it.valorCentavos,
+        dataGasto: it.dataGasto && it.dataGasto <= hoje ? it.dataGasto : hoje,
+      })
+    );
+    setItensLidos(null);
     Alert.alert(
-      'Leitura por Câmera (OCR)',
-      'Aponte para a anotação física ou recibo para preencher o valor automaticamente.'
+      'Gastos salvos! 🐷',
+      `${itens.length} ${itens.length === 1 ? 'gasto foi registrado' : 'gastos foram registrados'}. Veja no Painel.`,
+      [{ text: 'Ver no Painel', onPress: () => router.replace('/') }]
     );
   }
 
@@ -225,6 +298,23 @@ export default function Registro() {
           </TouchableOpacity>
         </View>
       </View>
+
+      {/* Carregando a leitura da foto */}
+      <Modal visible={lendo} transparent animationType="fade">
+        <View style={styles.containerModalAnimacao}>
+          <ActivityIndicator size="large" color="#FFFFFF" />
+          <Text style={styles.textoLendo}>Lendo a anotação...</Text>
+        </View>
+      </Modal>
+
+      {/* Revisão dos gastos lidos */}
+      <RevisaoLeitura
+        visivel={itensLidos !== null}
+        itensIniciais={itensLidos}
+        categorias={categorias}
+        onConfirmar={salvarLidos}
+        onCancelar={() => setItensLidos(null)}
+      />
 
       {/* Modal da Animação Lottie */}
       <Modal visible={animacaoVisivel} transparent={true} animationType="fade">
@@ -400,6 +490,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  textoLendo: { color: '#FFFFFF', marginTop: 12, fontSize: 15, fontWeight: 'bold' },
   lottieAnimacao: { 
     width: 280,
      height: 280 

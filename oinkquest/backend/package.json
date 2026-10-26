@@ -1,0 +1,12 @@
+{
+  "name": "oinkquest-backend",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Backend do OinkQuest: leitura de anotações de gastos com o Gemini",
+  "engines": { "node": ">=18" },
+  "scripts": {
+    "start": "node --env-file=.env server.js",
+    "test": "node --test"
+  }
+}
